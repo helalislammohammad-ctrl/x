@@ -1,0 +1,178 @@
+Package com.xedition.videoeditor
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.xedition.videoeditor.core.navigation.NavGraph
+import com.xedition.videoeditor.core.theme.ObsidianBlack
+import com.xedition.videoeditor.core.theme.XEditionTheme
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            XEditionTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = ObsidianBlack
+                ) {
+                    NavGraph()
+                }
+            }
+        }
+    }
+}package com.xedition.videoeditor.core.theme
+
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+
+// Obsidian Canvas and Dark Surfaces
+val ObsidianBlack = Color(0xFF050608)
+val DarkSurface = Color(0xFF0F1117)
+val DarkSurfaceVariant = Color(0xFF181B24)
+val DarkSurfaceContainer = Color(0xFF1F2330)
+val DarkBorder = Color(0xFF282D3D)
+
+// Brand Accents - Electric Violet & Cyan Neon Gradients
+val PurpleAccent = Color(0xFF8B5CF6)
+val PurpleAccentLight = Color(0xFFA78BFA)
+val BlueAccent = Color(0xFF3B82F6)
+val CyanAccent = Color(0xFF06B6D4)
+
+// Signature X Edition Gradient Brushes
+val XEditionBrandGradient = Brush.horizontalGradient(
+    colors = listOf(PurpleAccent, BlueAccent, CyanAccent)
+)
+
+val XEditionDarkSurfaceGradient = Brush.verticalGradient(
+    colors = listOf(DarkSurface, ObsidianBlack)
+)package com.xedition.videoeditor.core.navigation
+
+sealed class Screen(val route: String) {
+    object Splash : Screen("splash_screen")
+    object Onboarding : Screen("onboarding_screen")
+    object Login : Screen("login_screen")
+    object SignUp : Screen("signup_screen")
+    object Home : Screen("home_screen")
+    object Editor : Screen("editor_screen/{projectId}") {
+        fun createRoute(projectId: String) = "editor_screen/$projectId"
+    }
+    object Projects : Screen("projects_screen")
+    object Profile : Screen("profile_screen")
+    object Settings : Screen("settings_screen")
+}package com.xedition.videoeditor.feature.home
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun HomeScreen(
+    onNewProject: () -> Unit,
+    onOpenProject: (String) -> Unit,
+    onOpenTemplate: (String) -> Unit,
+    onOpenAITool: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        item { HomeTopBar() }
+        item { NewProjectHeroCard(onClick = onNewProject) }
+        item { AIToolsSuiteRow(onToolClick = onOpenAITool) }
+        item { RecentProjectsRow(onProjectClick = onOpenProject) }
+        item { TrendingTemplatesRow(onTemplateClick = onOpenTemplate) }
+        item { MyVideosList(onVideoClick = onOpenProject) }
+    }
+}package com.xedition.videoeditor.feature.import
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.exoplayer.ExoPlayer
+
+/**
+ * Android 13+ Photo/Video Picker Contract for X Edition.
+ * Handles device gallery permission-free video selection and ExoPlayer metadata extraction.
+ */
+@Composable
+fun rememberVideoImportLauncher(
+    onVideoSelected: (uri: Uri, durationMs: Long, width: Int, height: Int) -> Unit,
+    onError: (String) -> Unit
+): () -> Unit {
+    val context = LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        
+        // Extract video duration, resolution, and format via Android MediaMetadataRetriever
+        try {
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+            val durationStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val widthStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val heightStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            val durationMs = durationStr?.toLongOrNull() ?: 0L
+            val width = widthStr?.toIntOrNull() ?: 1920
+            val height = heightStr?.toIntOrNull() ?: 1080
+            retriever.release()
+
+            onVideoSelected(uri, durationMs, width, height)
+        } catch (e: Exception) {
+            onError(e.localizedMessage ?: "Failed to read video stream")
+        }
+    }
+
+    return {
+        // Enforce video-only selection via Android Photo Picker
+        galleryLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+        )
+    }
+}plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+
+android {
+    namespace = "com.xedition.videoeditor"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "com.xedition.videoeditor"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "2.4.0"
+    }
+
+    buildFeatures {
+        compose = true
+    }
+}
+
+dependencies {
+    // Jetpack Compose & Material 3
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.navigation.compose)
+
+    // AndroidX Media3 / ExoPlayer for Hardware Accelerated Timeline
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
+    implementation("androidx.media3:media3-transformer:1.5.1")
+}
